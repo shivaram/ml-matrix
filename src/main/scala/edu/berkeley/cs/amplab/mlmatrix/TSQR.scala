@@ -8,10 +8,10 @@ import breeze.linalg._
 import edu.berkeley.cs.amplab.mlmatrix.util.QRUtils
 import edu.berkeley.cs.amplab.mlmatrix.util.Utils
 
+import org.apache.spark.Accumulator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
-import org.apache.spark.Accumulator
 import org.apache.spark.SparkContext._
 
 class TSQR extends RowPartitionedSolver with Logging with Serializable {
@@ -221,7 +221,7 @@ class TSQR extends RowPartitionedSolver with Logging with Serializable {
       }
     }
 
-    val qrResult = Utils.treeReduce(qrTree, reduceQRSolveMany, 
+    val qrResult = Utils.treeReduce(qrTree, reduceQRSolveMany,
       depth=(math.log(A.rdd.partitions.size)/math.log(2)).toInt)
     val rFinal = qrResult._1
 

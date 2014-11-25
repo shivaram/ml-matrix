@@ -9,8 +9,9 @@ import com.github.fommil.netlib.LAPACK.{getInstance=>lapack}
 import org.netlib.util.intW
 import org.netlib.util.doubleW
 
-import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.{SparkContext, SparkException}
+
 
 /** Note: [[breeze.linalg.DenseMatrix]] by default uses column-major layout. */
 case class RowPartition(mat: DenseMatrix[Double]) extends Serializable
@@ -210,6 +211,15 @@ class RowPartitionedMatrix(
     val info = new intW(0)
     lapack.dtrcon("1", "U", "n", n, R.data, n, rcond, work, iwork, info)
     1/(rcond.`val`)
+  }
+
+  def svds(rOpt: Option[DenseMatrix[Double]] = None): DenseVector[Double] = {
+    val R = rOpt match {
+      case None => qrR()
+      case Some(rMat) => rMat
+    }
+    val svd.SVD(u,s,v) = svd(R)
+    s
   }
 
   // Apply a function to each partition of the matrix
