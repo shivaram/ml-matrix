@@ -33,7 +33,7 @@ object StabilityChecker extends Logging {
     var numIterations = 10
     var miniBatchFraction = 1.0
 
-    if (solver == "sgd") { 
+    if (solver == "sgd") {
       if (args.length < 9) {
         println("Usage: StabilityChecker <master> <sparkHome> <numRows> <numCols> <numParts> " +
           "<numClasses> <solver: tsqr|normal|sgd|local> [<stepsize> <numIters> <miniBatchFraction>]")

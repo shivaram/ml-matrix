@@ -116,7 +116,7 @@ object Fusion extends Logging with Serializable {
     val sc = new SparkContext(conf)
 
     //Directory that holds the data
-    val directory = "~/git/ml-matrix/imagenet-linear-solver-data/"
+    val directory = "imagenet-linear-solver-data/"
 
     // Daisy filenames
     val daisyTrainFilename = directory + "daisy-aPart1-1/"
@@ -152,6 +152,8 @@ object Fusion extends Logging with Serializable {
       case "sgd" =>
         new LeastSquaresGradientDescent(numIterations, stepSize, miniBatchFraction).solveLeastSquares(daisyTrain, daisyB)
       case "tsqr" =>
+        println("Size of daisyTrain is " + daisyTrain.getDim())
+        println("Size of daisyB is " + daisyB.getDim())
         new TSQR().solveLeastSquares(daisyTrain, daisyB)
       case "local" =>
         val (r, qtb) = QRUtils.qrSolve(daisyTrain.collect(), daisyB.collect())
@@ -187,24 +189,24 @@ object Fusion extends Logging with Serializable {
 
 
     // Information about the spectrum of the matrices
-    println("Condition number of daisyTrain " + daisyTrain.condEst())
-    println("Condition number of daisyTest " + daisyTest.condEst())
-    println("SVDs of daisyTrain " + daisyTrain.svds().toArray.mkString(" "))
-    println("Condition number of lcsTrain " + lcsTrain.condEst())
-    println("Condition number of lcsTest " + lcsTest.condEst())
-    println("SVDs of lcsTrain " + lcsTrain.svds().toArray.mkString(" "))
+    // println("Condition number of daisyTrain " + daisyTrain.condEst())
+    // println("Condition number of daisyTest " + daisyTest.condEst())
+    // println("SVDs of daisyTrain " + daisyTrain.svds().toArray.mkString(" "))
+    // println("Condition number of lcsTrain " + lcsTrain.condEst())
+    // println("Condition number of lcsTest " + lcsTest.condEst())
+    // println("SVDs of lcsTrain " + lcsTrain.svds().toArray.mkString(" "))
 
     val daisyResidualNorm = computeResidualNorm(daisyTrain, daisyB, daisyX)
     val lcsResidualNorm = computeResidualNorm(lcsTrain, lcsB, lcsX)
+    val testError = calcTestErr(daisyTest, lcsTest, daisyX, lcsX, imagenetTestLabels, 0.5, 0.5)
+    // println("Condition number, residual norm, time")
+    // println("Daisy: ")
+    // println(daisyTrain.condEst(), daisyResidualNorm, daisyTime)
+    // println("LCS: ")
+    // println(lcsTrain.condEst(), lcsResidualNorm, lcsTime)
 
-    println("Condition number, residual norm, time")
-    println("Daisy: ")
-    println(daisyTrain.condEst(), daisyResidualNorm, daisyTime)
-    println("LCS: ")
-    println(lcsTrain.condEst(), lcsResidualNorm, lcsTime)
 
-    //When we get the data, can calculate testError as follows
-    //val testError = calcTestErr(daisyTest, lcsTest, daisyX, lcsX, imagenetTestLabels, 0.5, 0.5)
 
+    println(testError)
   }
 }
