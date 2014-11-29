@@ -101,9 +101,9 @@ object Fusion extends Logging with Serializable {
           "<solver: tsqr|normal|sgd|local> [<stepsize> <numIters> <miniBatchFraction>]")
         System.exit(0)
       } else {
-        stepSize = args(6).toDouble
-        numIterations = args(7).toInt
-        miniBatchFraction = args(8).toDouble
+        stepSize = args(2).toDouble
+        numIterations = args(3).toInt
+        miniBatchFraction = args(4).toDouble
       }
     }
 

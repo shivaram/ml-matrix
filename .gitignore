@@ -1,3 +1,7 @@
+# Data files, plotting scripts, and figures for imagenet project
+imagenet-linear-solver-data/
+figures/
+
 *.class
 *.log
 
