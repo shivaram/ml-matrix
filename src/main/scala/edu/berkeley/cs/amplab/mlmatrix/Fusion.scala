@@ -71,7 +71,7 @@ object Fusion extends Logging with Serializable {
   def getErrPercent(predicted: RDD[Array[Int]], actual: RDD[Array[Int]], numTestImages: Int): Double = {
     // FIXME: Each image only has one actual label, so actual should be an RDD[Int]
 
-    
+
 
     val totalErr = predicted.zip(actual).map({ case (topKLabels, actualLabel) =>
       if (topKLabels.contains(actualLabel(0))) {
@@ -186,6 +186,7 @@ object Fusion extends Logging with Serializable {
       x.map(y=> y.toInt))
 
     // FIXME: Should Repartition data and labels together to 16 partitions
+    /*
     val data: RDD[((((((RowPartition, RowPartition), RowPartition), RowPartition), RowPartition), RowPartition), Array[Int])] =
       daisyTrain.rdd.zip(daisyTest.rdd).zip(daisyB.rdd).zip(lcsTrain.rdd).zip(lcsTest.rdd).zip(lcsB.rdd).zip(imagenetTestLabels).repartition(16)
     val first: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._1._1)
@@ -195,13 +196,18 @@ object Fusion extends Logging with Serializable {
     val fifth: RDD[RowPartition] = data.map(parts => parts._1._1._2)
     val sixth: RDD[RowPartition] = data.map(parts => parts._1._2)
 
-    imagenetTestLabels = data.map(parts => parts._2)
-    daisyTrain = new RowPartitionedMatrix(first)
-    daisyTest = new RowPartitionedMatrix(second)
-    daisyB = new RowPartitionedMatrix(third)
-    lcsTrain = new RowPartitionedMatrix(fourth)
-    lcsTest = new RowPartitionedMatrix(fifth)
-    lcsB = new RowPartitionedMatrix(sixth)
+
+    */
+
+    val rePartitionedRDDs = Utils.coalesceRDDs(16, daisyTrain.rdd, daisyTest.rdd, daisyB.rdd, lcsTrain.rdd, lcsTest.rdd, lcsB.rdd, imagenetTestLabels)
+    daisyTrain = new RowPartitionedMatrix(rePartitionedRDDs(0))
+    daisyTest = new RowPartitionedMatrix(rePartitionedRDDs(1))
+    daisyB = new RowPartitionedMatrix(rePartitionedRDDs(2))
+    lcsTrain = new RowPartitionedMatrix(rePartitionedRDDs(3))
+    lcsTest = new RowPartitionedMatrix(rePartitionedRDDs(4))
+    lcsB = new RowPartitionedMatrix(rePartitionedRDDs(5))
+    imagenetTestLabels = rePartitionedRDDs(6)
+
 
 
 

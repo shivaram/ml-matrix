@@ -122,13 +122,13 @@ object Utils {
         position
       }
     } : Iterator[Int]
-   
+
     val randomIndices = firstRDD.mapPartitionsWithIndex(distributePartition)
     val partitioner = new HashPartitioner(numPartitions)
     // Now partition each RDD by zipping with same random index
     val repartitionedRDDs = rdds.map { rdd =>
       randomIndices.zip(rdd).partitionBy(partitioner).values
     }
-    repartitionedRDDs  
+    repartitionedRDDs
   }
 }
