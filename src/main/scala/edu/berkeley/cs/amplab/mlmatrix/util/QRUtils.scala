@@ -1,5 +1,7 @@
 package edu.berkeley.cs.amplab.mlmatrix.util
 
+import scala.math.sqrt
+
 import breeze.linalg._
 import breeze.generic.UFunc
 import org.netlib.util.intW
@@ -26,7 +28,7 @@ object QRUtils {
     val workspace = new Array[Double](lwork1)
 
     // Perform the QR factorization with dgeqrf
-    val maxd = scala.math.max(m, n)
+    // val maxd = scala.math.max(m, n)
     val mind = scala.math.min(m, n)
     val tau = new Array[Double](mind)
     val outputMat = if (cloneMatrix) {
@@ -170,6 +172,18 @@ object QRUtils {
       applyQ(yPart, tau, b, transpose=true)
     }
     (rPart, xs)
+  }
+
+  /**
+   * QR factorization necessary to solve l2-regularized least squares problem
+   * (Function does not perform actual least squares solve)
+   */
+  def qrSolveWithL2(A: DenseMatrix[Double], B: DenseMatrix[Double], lambda: Double) = {
+    val r = QRUtils.qrR(A)
+    val gamma = DenseMatrix.eye[Double](r.cols) :* scala.math.sqrt(lambda)
+    val aTilde = DenseMatrix.vertcat(r, gamma)
+    val bTilde = DenseMatrix.vertcat(B, new DenseMatrix[Double](r.cols, B.cols))
+    (aTilde, bTilde)
   }
 
 }

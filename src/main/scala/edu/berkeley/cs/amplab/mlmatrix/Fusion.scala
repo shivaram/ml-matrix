@@ -51,6 +51,16 @@ object Fusion extends Logging with Serializable {
     residualNorm
   }
 
+  def computeResidualNormWithL2(A: RowPartitionedMatrix,
+      b: RowPartitionedMatrix,
+      xComputed: DenseMatrix[Double], lambda: Double) = {
+    val unregularizedNorm = computeResidualNorm(A,b,xComputed)
+    val normX = norm(xComputed.toDenseVector)
+
+    scala.math.sqrt(unregularizedNorm*unregularizedNorm + lambda*normX*normX)
+  }
+
+
   def loadMatrixFromFile(sc: SparkContext, filename: String):
     RowPartitionedMatrix = {
     RowPartitionedMatrix.fromArray(
@@ -158,16 +168,31 @@ object Fusion extends Logging with Serializable {
     val imagenetTestLabelsFilename = directory + "imagenet-test-actual/"
 
     // Load data as RowPartitionedMatrices
-    val daisyTrain = loadMatrixFromFile(sc, daisyTrainFilename)
-    val daisyTest = loadMatrixFromFile(sc, daisyTestFilename)
-    val daisyB = loadMatrixFromFile(sc, daisyBFilename)
+    var daisyTrain = loadMatrixFromFile(sc, daisyTrainFilename)
+    var daisyTest = loadMatrixFromFile(sc, daisyTestFilename)
+    var daisyB = loadMatrixFromFile(sc, daisyBFilename)
 
 
-    val lcsTrain = loadMatrixFromFile(sc, lcsTrainFilename)
-    val lcsTest = loadMatrixFromFile(sc, lcsTestFilename)
-    val lcsB = loadMatrixFromFile(sc, lcsBFilename)
+    var lcsTrain = loadMatrixFromFile(sc, lcsTrainFilename)
+    var lcsTest = loadMatrixFromFile(sc, lcsTestFilename)
+    var lcsB = loadMatrixFromFile(sc, lcsBFilename)
 
     // FIXME: Should Repartition data and labels together to 16 partitions
+    val data: RDD[(((((RowPartition, RowPartition), RowPartition), RowPartition), RowPartition), RowPartition)] =
+      daisyTrain.rdd.zip(daisyTest.rdd).zip(daisyB.rdd).zip(lcsTrain.rdd).zip(lcsTest.rdd).zip(lcsB.rdd).repartition(16)
+    val first: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._1)
+    val second: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._2)
+    val third: RDD[RowPartition] = data.map(parts => parts._1._1._1._2)
+    val fourth: RDD[RowPartition] = data.map(parts => parts._1._1._2)
+    val fifth: RDD[RowPartition] = data.map(parts => parts._1._2)
+    val sixth: RDD[RowPartition] = data.map(parts => parts._2)
+    daisyTrain = new RowPartitionedMatrix(first)
+    daisyTest = new RowPartitionedMatrix(second)
+    daisyB = new RowPartitionedMatrix(third)
+    lcsTrain = new RowPartitionedMatrix(fourth)
+    lcsTest = new RowPartitionedMatrix(fifth)
+    lcsB = new RowPartitionedMatrix(sixth)
+
 
     // Load text file as array of ints
     val imagenetTestLabels = sc.textFile(imagenetTestLabelsFilename).map(line=>line.split(",")).map(x =>
@@ -198,17 +223,14 @@ object Fusion extends Logging with Serializable {
     // println("Condition number of lcsTest " + lcsTest.condEst())
     // println("SVDs of lcsTrain " + lcsTrain.svds().toArray.mkString(" "))
 
-    val daisyResidualNorm = computeResidualNorm(daisyTrain, daisyB, daisyX)
-    val lcsResidualNorm = computeResidualNorm(lcsTrain, lcsB, lcsX)
-    //val testError = calcTestErr(daisyTest, lcsTest, daisyX, lcsX, imagenetTestLabels, 0.5, 0.5)
+    val daisyResidual= computeResidualNormWithL2(daisyTrain, daisyB, daisyX, lambda)
+    val lcsResidual = computeResidualNormWithL2(lcsTrain, lcsB, lcsX, lambda)
+    val testError = calcTestErr(daisyTest, lcsTest, daisyX, lcsX, imagenetTestLabels, 0.5, 0.5)
     println("Condition number, residual norm, time")
     println("Daisy: ")
-    println(daisyTrain.condEst(), daisyResidualNorm, daisyTime)
+    println(daisyTrain.condEst(), daisyResidual, daisyTime)
     println("LCS: ")
-    println(lcsTrain.condEst(), lcsResidualNorm, lcsTime)
-
-
-
-    //println(testError)
+    println(lcsTrain.condEst(), lcsResidual, lcsTime)
+    println(testError)
   }
 }

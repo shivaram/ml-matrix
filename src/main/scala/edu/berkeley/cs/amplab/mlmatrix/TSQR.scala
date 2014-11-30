@@ -168,6 +168,7 @@ class TSQR extends RowPartitionedSolver with Logging with Serializable {
       lambdas: Array[Double]): Seq[DenseMatrix[Double]] = {
     val matrixParts = A.rdd.zip(b.rdd).map(x => (x._1.mat, x._2.mat))
     val qrTree = matrixParts.map { part =>
+      println("part is " + part.rows +  ", "+ part.cols)
       val (aPart, bPart) = part
       if (aPart.rows < aPart.cols) {
         (aPart, bPart)
@@ -221,7 +222,7 @@ class TSQR extends RowPartitionedSolver with Logging with Serializable {
       }
     }
 
-    val qrResult = Utils.treeReduce(qrTree, reduceQRSolveMany, 
+    val qrResult = Utils.treeReduce(qrTree, reduceQRSolveMany,
       depth=math.ceil(math.log(A.rdd.partitions.size)/math.log(2)).toInt)
     val rFinal = qrResult._1
 
