@@ -70,6 +70,9 @@ object Fusion extends Logging with Serializable {
 
   def getErrPercent(predicted: RDD[Array[Int]], actual: RDD[Array[Int]], numTestImages: Int): Double = {
     // FIXME: Each image only has one actual label, so actual should be an RDD[Int]
+
+    
+
     val totalErr = predicted.zip(actual).map({ case (topKLabels, actualLabel) =>
       if (topKLabels.contains(actualLabel(0))) {
         0.0
@@ -114,6 +117,7 @@ object Fusion extends Logging with Serializable {
     }
 
     val predictedLabels = topKClassifier(5, fusedPrediction)
+    println("Got predicted labels ")
     val errPercent = getErrPercent(predictedLabels, actualLabels, numTestImages)
     errPercent
   }
@@ -177,15 +181,21 @@ object Fusion extends Logging with Serializable {
     var lcsTest = loadMatrixFromFile(sc, lcsTestFilename)
     var lcsB = loadMatrixFromFile(sc, lcsBFilename)
 
+    // Load text file as array of ints
+    var imagenetTestLabels: RDD[Array[Int]] = sc.textFile(imagenetTestLabelsFilename).map(line=>line.split(",")).map(x =>
+      x.map(y=> y.toInt))
+
     // FIXME: Should Repartition data and labels together to 16 partitions
-    val data: RDD[(((((RowPartition, RowPartition), RowPartition), RowPartition), RowPartition), RowPartition)] =
-      daisyTrain.rdd.zip(daisyTest.rdd).zip(daisyB.rdd).zip(lcsTrain.rdd).zip(lcsTest.rdd).zip(lcsB.rdd).repartition(16)
-    val first: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._1)
-    val second: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._2)
-    val third: RDD[RowPartition] = data.map(parts => parts._1._1._1._2)
-    val fourth: RDD[RowPartition] = data.map(parts => parts._1._1._2)
-    val fifth: RDD[RowPartition] = data.map(parts => parts._1._2)
-    val sixth: RDD[RowPartition] = data.map(parts => parts._2)
+    val data: RDD[((((((RowPartition, RowPartition), RowPartition), RowPartition), RowPartition), RowPartition), Array[Int])] =
+      daisyTrain.rdd.zip(daisyTest.rdd).zip(daisyB.rdd).zip(lcsTrain.rdd).zip(lcsTest.rdd).zip(lcsB.rdd).zip(imagenetTestLabels).repartition(16)
+    val first: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._1._1)
+    val second: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._1._2)
+    val third: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._2)
+    val fourth: RDD[RowPartition] = data.map(parts => parts._1._1._1._2)
+    val fifth: RDD[RowPartition] = data.map(parts => parts._1._1._2)
+    val sixth: RDD[RowPartition] = data.map(parts => parts._1._2)
+
+    imagenetTestLabels = data.map(parts => parts._2)
     daisyTrain = new RowPartitionedMatrix(first)
     daisyTest = new RowPartitionedMatrix(second)
     daisyB = new RowPartitionedMatrix(third)
@@ -194,9 +204,7 @@ object Fusion extends Logging with Serializable {
     lcsB = new RowPartitionedMatrix(sixth)
 
 
-    // Load text file as array of ints
-    val imagenetTestLabels = sc.textFile(imagenetTestLabelsFilename).map(line=>line.split(",")).map(x =>
-      x.map(y=> y.toInt))
+
 
     // Solve for daisy x
     var begin = System.nanoTime()
@@ -213,6 +221,8 @@ object Fusion extends Logging with Serializable {
     var end2 = System.nanoTime()
     val lcsTime = (end2 -begin2) /1e6
 
+    println("Finished solving for lcsX")
+
     // FIXME: Residual norm needs to be calculated for regularized problem
 
     // Information about the spectrum of the matrices
@@ -225,12 +235,15 @@ object Fusion extends Logging with Serializable {
 
     val daisyResidual= computeResidualNormWithL2(daisyTrain, daisyB, daisyX, lambda)
     val lcsResidual = computeResidualNormWithL2(lcsTrain, lcsB, lcsX, lambda)
-    val testError = calcTestErr(daisyTest, lcsTest, daisyX, lcsX, imagenetTestLabels, 0.5, 0.5)
+    println("Finished computing the residuals")
+
     println("Condition number, residual norm, time")
     println("Daisy: ")
     println(daisyTrain.condEst(), daisyResidual, daisyTime)
     println("LCS: ")
     println(lcsTrain.condEst(), lcsResidual, lcsTime)
+
+    val testError = calcTestErr(daisyTest, lcsTest, daisyX, lcsX, imagenetTestLabels, 0.5, 0.5)
     println(testError)
   }
 }

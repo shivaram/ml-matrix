@@ -62,6 +62,7 @@ class NormalEquations extends RowPartitionedSolver with Logging with Serializabl
       lambdas: Array[Double]) : Seq[DenseMatrix[Double]]  = {
     val Ab = A.rdd.zip(b.rdd).map(x => (x._1.mat, x._2.mat))
     val ATA_ATb = Ab.map { part =>
+      println("aPart is of size " + part._1.rows + " , " + part._1.cols)
       (part._1.t * part._1, part._1.t * part._2)
     }
 
