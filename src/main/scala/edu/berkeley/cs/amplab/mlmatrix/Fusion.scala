@@ -16,6 +16,30 @@ import org.apache.spark.SparkContext._
 
 object Fusion extends Logging with Serializable {
 
+
+  def solveForX(A: RowPartitionedMatrix, b: RowPartitionedMatrix, solver: String,
+      lambda: Double,
+      numIterations: Integer,
+      stepSize: Double,
+      miniBatchFraction: Double) = {
+    solver.toLowerCase match {
+      case "normal" =>
+        new NormalEquations().solveLeastSquaresWithL2(A, b, lambda)
+      case "sgd" =>
+        new LeastSquaresGradientDescent(numIterations, stepSize, miniBatchFraction).solveLeastSquaresWithL2(A, b, lambda)
+      case "tsqr" =>
+        new TSQR().solveLeastSquaresWithL2(A, b, lambda)
+      case "local" =>
+        // Solve regularized least squares problem with local qr factorization
+        val (aTilde, bTilde) = QRUtils.qrSolveWithL2(A.collect(), b.collect(), lambda)
+        aTilde \ bTilde
+      case _ =>
+        logError("Invalid Solver " + solver + " should be one of tsqr|normal|sgd")
+        logError("Using TSQR")
+        new TSQR().solveLeastSquares(A, b)
+    }
+  }
+
   def computeResidualNorm(A: RowPartitionedMatrix,
       b: RowPartitionedMatrix,
       xComputed: DenseMatrix[Double]) = {
@@ -35,6 +59,7 @@ object Fusion extends Logging with Serializable {
   }
 
   def getErrPercent(predicted: RDD[Array[Int]], actual: RDD[Array[Int]], numTestImages: Int): Double = {
+    // FIXME: Each image only has one actual label, so actual should be an RDD[Int]
     val totalErr = predicted.zip(actual).map({ case (topKLabels, actualLabel) =>
       if (topKLabels.contains(actualLabel(0))) {
         0.0
@@ -49,7 +74,6 @@ object Fusion extends Logging with Serializable {
 
   def topKClassifier(k: Int, in: RDD[DenseVector[Double]]) : RDD[Array[Int]] = {
     // Returns top k indices with maximum value
-    // ary.toSeq.zipWithIndex.sortBy(_._1).takeRight(k).map(_._2).toArray
     in.map { ary => argtopk(ary, k).toArray}
   }
 
@@ -86,24 +110,26 @@ object Fusion extends Logging with Serializable {
 
   def main(args: Array[String]) {
     if (args.length < 2) {
-      println("Usage: Fusion <master> <solver: tsqr|normal|sgd|local> [<stepsize> <numIters> <miniBatchFraction>]")
+      println("Usage: Fusion <master> <solver: tsqr|normal|sgd|local> <lambda> [<stepsize> <numIters> <miniBatchFraction>]")
       System.exit(0)
     }
     val sparkMaster = args(0)
     val solver = args(1)
+    // Lambda for regularization
+    val lambda = args(2).toDouble
 
     var stepSize = 0.1
     var numIterations = 10
     var miniBatchFraction = 1.0
     if (solver == "sgd") {
-      if (args.length < 5) {
+      if (args.length < 6) {
         println("Usage: StabilityChecker <master> <sparkHome> " +
           "<solver: tsqr|normal|sgd|local> [<stepsize> <numIters> <miniBatchFraction>]")
         System.exit(0)
       } else {
-        stepSize = args(2).toDouble
-        numIterations = args(3).toInt
-        miniBatchFraction = args(4).toDouble
+        stepSize = args(3).toDouble
+        numIterations = args(4).toInt
+        miniBatchFraction = args(5).toDouble
       }
     }
 
@@ -136,57 +162,33 @@ object Fusion extends Logging with Serializable {
     val daisyTest = loadMatrixFromFile(sc, daisyTestFilename)
     val daisyB = loadMatrixFromFile(sc, daisyBFilename)
 
+
     val lcsTrain = loadMatrixFromFile(sc, lcsTrainFilename)
     val lcsTest = loadMatrixFromFile(sc, lcsTestFilename)
     val lcsB = loadMatrixFromFile(sc, lcsBFilename)
 
-    //Load text file as array of ints
+    // FIXME: Should Repartition data and labels together to 16 partitions
+
+    // Load text file as array of ints
     val imagenetTestLabels = sc.textFile(imagenetTestLabelsFilename).map(line=>line.split(",")).map(x =>
       x.map(y=> y.toInt))
 
-    //Solve for daisy x
+    // Solve for daisy x
     var begin = System.nanoTime()
-    val daisyX = solver.toLowerCase match {
-      case "normal" =>
-        new NormalEquations().solveLeastSquares(daisyTrain, daisyB)
-      case "sgd" =>
-        new LeastSquaresGradientDescent(numIterations, stepSize, miniBatchFraction).solveLeastSquares(daisyTrain, daisyB)
-      case "tsqr" =>
-        println("Size of daisyTrain is " + daisyTrain.getDim())
-        println("Size of daisyB is " + daisyB.getDim())
-        new TSQR().solveLeastSquares(daisyTrain, daisyB)
-      case "local" =>
-        val (r, qtb) = QRUtils.qrSolve(daisyTrain.collect(), daisyB.collect())
-        r \ qtb
-      case _ =>
-        logError("Invalid Solver " + solver + " should be one of tsqr|normal|sgd")
-        logError("Using TSQR")
-        new TSQR().solveLeastSquares(daisyTrain, daisyB)
-    }
+    val daisyX = solveForX(daisyTrain, daisyB, solver, lambda, numIterations, stepSize, miniBatchFraction)
     var end = System.nanoTime()
     // Timing numbers are in ms
     val daisyTime = (end - begin) / 1e6
 
-    //Solve for lcs x
+    println("Finished solving for daisy X ")
+
+    // Solve for lcs x
     var begin2 = System.nanoTime()
-    val lcsX = solver.toLowerCase match {
-      case "normal" =>
-        new NormalEquations().solveLeastSquares(lcsTrain, lcsB)
-      case "sgd" =>
-        new LeastSquaresGradientDescent(numIterations, stepSize, miniBatchFraction).solveLeastSquares(lcsTrain, lcsB)
-      case "tsqr" =>
-        new TSQR().solveLeastSquares(lcsTrain, lcsB)
-      case "local" =>
-        val (r, qtb) = QRUtils.qrSolve(lcsTrain.collect(), lcsB.collect())
-        r \ qtb
-      case _ =>
-        logError("Invalid Solver " + solver + " should be one of tsqr|normal|sgd")
-        logError("Using TSQR")
-        new TSQR().solveLeastSquares(lcsTrain, lcsB)
-    }
+    val lcsX = solveForX(lcsTrain, lcsB, solver, lambda, numIterations, stepSize, miniBatchFraction)
     var end2 = System.nanoTime()
     val lcsTime = (end2 -begin2) /1e6
 
+    // FIXME: Residual norm needs to be calculated for regularized problem
 
     // Information about the spectrum of the matrices
     // println("Condition number of daisyTrain " + daisyTrain.condEst())
@@ -198,15 +200,15 @@ object Fusion extends Logging with Serializable {
 
     val daisyResidualNorm = computeResidualNorm(daisyTrain, daisyB, daisyX)
     val lcsResidualNorm = computeResidualNorm(lcsTrain, lcsB, lcsX)
-    val testError = calcTestErr(daisyTest, lcsTest, daisyX, lcsX, imagenetTestLabels, 0.5, 0.5)
-    // println("Condition number, residual norm, time")
-    // println("Daisy: ")
-    // println(daisyTrain.condEst(), daisyResidualNorm, daisyTime)
-    // println("LCS: ")
-    // println(lcsTrain.condEst(), lcsResidualNorm, lcsTime)
+    //val testError = calcTestErr(daisyTest, lcsTest, daisyX, lcsX, imagenetTestLabels, 0.5, 0.5)
+    println("Condition number, residual norm, time")
+    println("Daisy: ")
+    println(daisyTrain.condEst(), daisyResidualNorm, daisyTime)
+    println("LCS: ")
+    println(lcsTrain.condEst(), lcsResidualNorm, lcsTime)
 
 
 
-    println(testError)
+    //println(testError)
   }
 }
