@@ -185,28 +185,15 @@ object Fusion extends Logging with Serializable {
     var imagenetTestLabels: RDD[Array[Int]] = sc.textFile(imagenetTestLabelsFilename).map(line=>line.split(",")).map(x =>
       x.map(y=> y.toInt))
 
-    // FIXME: Should Repartition data and labels together to 16 partitions
-    /*
-    val data: RDD[((((((RowPartition, RowPartition), RowPartition), RowPartition), RowPartition), RowPartition), Array[Int])] =
-      daisyTrain.rdd.zip(daisyTest.rdd).zip(daisyB.rdd).zip(lcsTrain.rdd).zip(lcsTest.rdd).zip(lcsB.rdd).zip(imagenetTestLabels).repartition(16)
-    val first: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._1._1)
-    val second: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._1._2)
-    val third: RDD[RowPartition] = data.map(parts => parts._1._1._1._1._2)
-    val fourth: RDD[RowPartition] = data.map(parts => parts._1._1._1._2)
-    val fifth: RDD[RowPartition] = data.map(parts => parts._1._1._2)
-    val sixth: RDD[RowPartition] = data.map(parts => parts._1._2)
+    val coalescer = Utils.createCoalescer(daisyTrain.rdd, 16)
+    daisyTrain = new RowPartitionedMatrix(coalescer(daisyTrain.rdd))
+    daisyTest = new RowPartitionedMatrix(coalescer(daisyTest.rdd))
+    daisyB = new RowPartitionedMatrix(coalescer(daisyB.rdd))
+    lcsTrain = new RowPartitionedMatrix(coalescer(lcsTrain.rdd))
+    lcsTest = new RowPartitionedMatrix(coalescer(lcsTest.rdd))
+    lcsB = new RowPartitionedMatrix(coalescer(lcsB.rdd))
+    imagenetTestLabels = coalescer(imagenetTestLabels)
 
-
-    */
-
-    val rePartitionedRDDs = Utils.coalesceRDDs(16, daisyTrain.rdd, daisyTest.rdd, daisyB.rdd, lcsTrain.rdd, lcsTest.rdd, lcsB.rdd, imagenetTestLabels)
-    daisyTrain = new RowPartitionedMatrix(rePartitionedRDDs(0))
-    daisyTest = new RowPartitionedMatrix(rePartitionedRDDs(1))
-    daisyB = new RowPartitionedMatrix(rePartitionedRDDs(2))
-    lcsTrain = new RowPartitionedMatrix(rePartitionedRDDs(3))
-    lcsTest = new RowPartitionedMatrix(rePartitionedRDDs(4))
-    lcsB = new RowPartitionedMatrix(rePartitionedRDDs(5))
-    imagenetTestLabels = rePartitionedRDDs(6)
 
 
 
