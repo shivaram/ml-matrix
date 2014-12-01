@@ -172,17 +172,14 @@ object Fusion extends Logging with Serializable {
 
     // Load data as RowPartitionedMatrices
     val daisyTrainRDD = loadMatrixFromFile(sc, daisyTrainFilename)
-    val daisyTest = RowPartitionedMatrix.fromArray(loadMatrixFromFile(sc, daisyTestFilename))
+    val daisyTestRDD = loadMatrixFromFile(sc, daisyTestFilename)
     val daisyBRDD = loadMatrixFromFile(sc, daisyBFilename)
 
 
     val lcsTrainRDD = loadMatrixFromFile(sc, lcsTrainFilename)
-    val lcsTest = RowPartitionedMatrix.fromArray(loadMatrixFromFile(sc, lcsTestFilename))
+    var lcsTestRDD = loadMatrixFromFile(sc, lcsTestFilename)
     val lcsBRDD = loadMatrixFromFile(sc, lcsBFilename)
 
-    // Load text file as array of ints
-    var imagenetTestLabels: RDD[Array[Int]] = sc.textFile(imagenetTestLabelsFilename).map(line=>line.split(",")).map(x =>
-      x.map(y=> y.toInt))
     println("Creating coalescer")
     val coalescer = Utils.createCoalescer(daisyTrainRDD, 16)
     val daisyTrain = RowPartitionedMatrix.fromArray(coalescer(daisyTrainRDD))
@@ -191,13 +188,22 @@ object Fusion extends Logging with Serializable {
     val lcsTrain = RowPartitionedMatrix.fromArray(coalescer(lcsTrainRDD))
     val lcsB = RowPartitionedMatrix.fromArray(coalescer(lcsBRDD))
     println("Done coalescing lcs and daisy")
+
+    // Load text file as array of ints
+    var imagenetTestLabels: RDD[Array[Int]] = sc.textFile(imagenetTestLabelsFilename).map { line =>
+      line.split(",")
+    }.map { x =>
+      x.map(y=> y.toInt)
+    }
+
+    // Create a new coalescer for test data.
+    // NOTE: We need to do this as test data has different number of entries per partition
+    val testCoalescer = Utils.createCoalescer(daisyTestRDD, 16)
+    val daisyTest = RowPartitionedMatrix.fromArray(coalescer(daisyTestRDD))
+    val lcsTest = RowPartitionedMatrix.fromArray(coalescer(lcsTestRDD))
+    // NOTE: Test labels is partitioned the same way as test features
     imagenetTestLabels = coalescer(imagenetTestLabels)
     println("imageNet coalesced")
-
-
-
-
-
 
     // Solve for daisy x
     var begin = System.nanoTime()
