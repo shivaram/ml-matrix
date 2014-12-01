@@ -199,10 +199,10 @@ object Fusion extends Logging with Serializable {
     // Create a new coalescer for test data.
     // NOTE: We need to do this as test data has different number of entries per partition
     val testCoalescer = Utils.createCoalescer(daisyTestRDD, 16)
-    val daisyTest = RowPartitionedMatrix.fromArray(coalescer(daisyTestRDD))
-    val lcsTest = RowPartitionedMatrix.fromArray(coalescer(lcsTestRDD))
+    val daisyTest = RowPartitionedMatrix.fromArray(testCoalescer(daisyTestRDD))
+    val lcsTest = RowPartitionedMatrix.fromArray(testCoalescer(lcsTestRDD))
     // NOTE: Test labels is partitioned the same way as test features
-    imagenetTestLabels = coalescer(imagenetTestLabels)
+    imagenetTestLabels = testCoalescer(imagenetTestLabels)
     println("imageNet coalesced")
 
     // Solve for daisy x
