@@ -62,10 +62,9 @@ object Fusion extends Logging with Serializable {
 
 
   def loadMatrixFromFile(sc: SparkContext, filename: String):
-    RowPartitionedMatrix = {
-    RowPartitionedMatrix.fromArray(
+    RDD[Array[Double]] = {
       sc.textFile(filename).map(line=>line.split(",")).map(x =>
-        x.map(y=> y.toDouble)))
+        x.map(y=> y.toDouble))
   }
 
   def getErrPercent(predicted: RDD[Array[Int]], actual: RDD[Array[Int]], numTestImages: Int): Double = {
@@ -172,27 +171,28 @@ object Fusion extends Logging with Serializable {
     val imagenetTestLabelsFilename = directory + "imagenet-test-actual/"
 
     // Load data as RowPartitionedMatrices
-    var daisyTrain = loadMatrixFromFile(sc, daisyTrainFilename)
-    var daisyTest = loadMatrixFromFile(sc, daisyTestFilename)
-    var daisyB = loadMatrixFromFile(sc, daisyBFilename)
+    val daisyTrainRDD = loadMatrixFromFile(sc, daisyTrainFilename)
+    val daisyTest = RowPartitionedMatrix.fromArray(loadMatrixFromFile(sc, daisyTestFilename))
+    val daisyBRDD = loadMatrixFromFile(sc, daisyBFilename)
 
 
-    var lcsTrain = loadMatrixFromFile(sc, lcsTrainFilename)
-    var lcsTest = loadMatrixFromFile(sc, lcsTestFilename)
-    var lcsB = loadMatrixFromFile(sc, lcsBFilename)
+    val lcsTrainRDD = loadMatrixFromFile(sc, lcsTrainFilename)
+    val lcsTest = RowPartitionedMatrix.fromArray(loadMatrixFromFile(sc, lcsTestFilename))
+    val lcsBRDD = loadMatrixFromFile(sc, lcsBFilename)
 
     // Load text file as array of ints
     var imagenetTestLabels: RDD[Array[Int]] = sc.textFile(imagenetTestLabelsFilename).map(line=>line.split(",")).map(x =>
       x.map(y=> y.toInt))
-
-    val coalescer = Utils.createCoalescer(daisyTrain.rdd, 16)
-    daisyTrain = new RowPartitionedMatrix(coalescer(daisyTrain.rdd))
-    daisyTest = new RowPartitionedMatrix(coalescer(daisyTest.rdd))
-    daisyB = new RowPartitionedMatrix(coalescer(daisyB.rdd))
-    lcsTrain = new RowPartitionedMatrix(coalescer(lcsTrain.rdd))
-    lcsTest = new RowPartitionedMatrix(coalescer(lcsTest.rdd))
-    lcsB = new RowPartitionedMatrix(coalescer(lcsB.rdd))
+    println("Creating coalescer")
+    val coalescer = Utils.createCoalescer(daisyTrainRDD, 16)
+    val daisyTrain = RowPartitionedMatrix.fromArray(coalescer(daisyTrainRDD))
+    val daisyB = RowPartitionedMatrix.fromArray(coalescer(daisyBRDD))
+    println("daisyB and daisyTrain coalesced")
+    val lcsTrain = RowPartitionedMatrix.fromArray(coalescer(lcsTrainRDD))
+    val lcsB = RowPartitionedMatrix.fromArray(coalescer(lcsBRDD))
+    println("Done coalescing lcs and daisy")
     imagenetTestLabels = coalescer(imagenetTestLabels)
+    println("imageNet coalesced")
 
 
 
